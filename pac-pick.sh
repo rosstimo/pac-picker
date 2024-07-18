@@ -41,6 +41,55 @@ get_optional_deps() {
     done
 }
 
+# Function to create a menu of optional dependencies using dialog
+get_selections() {
+    local optional_deps="$1"
+
+    # Create an array to store the dialog items
+    local dialog_items=()
+
+    # Process each line of the optional dependencies
+    IFS=$'\n'
+    for line in $optional_deps; do
+        # Extract the package name, description, and installation status
+        package_name=$(echo "$line" | cut -d':' -f1)
+        description=$(echo "$line" | cut -d':' -f2)
+        installed=$(echo "$line" | cut -d':' -f3)
+
+        # Add the package name, description, and selection status to the dialog list
+        if [ "$installed" -eq 1 ]; then
+            dialog_items+=("$package_name" "$description" "on")
+        else
+            dialog_items+=("$package_name" "$description" "off")
+        fi
+    done
+
+    # Create a dialog checklist of optional dependencies
+    choices=$(dialog --separate-output --checklist "Select optional dependencies to install:" 15 50 10 "${dialog_items[@]}" 2>&1 >/dev/tty)
+
+    # Clear the screen after dialog exits
+    clear
+
+    # Process the selected and not selected items
+    local selected_items=()
+    local not_selected_items=()
+
+    # Convert choices to an array
+    IFS=$'\n' read -d '' -r -a selected_items <<< "$choices"
+
+    # Determine not selected items
+    for line in $optional_deps; do
+        package_name=$(echo "$line" | cut -d':' -f1)
+        if ! [[ " ${selected_items[@]} " =~ " ${package_name} " ]]; then
+            not_selected_items+=("$package_name")
+        fi
+    done
+
+    # Return the selected and not selected items
+    echo "Selected items: ${selected_items[@]}"
+    echo "Not selected items: ${not_selected_items[@]}"
+}
+
 # Main function
 main() {
     # Verify there is at least one argument or show Usage
@@ -51,6 +100,12 @@ main() {
 
     local package=$1
 
+    # Check if the package is already installed
+    if is_installed "$package"; then
+        echo "Package '$package' is already installed."
+        return 0
+    fi
+
     # Capture the result of get_optional_deps
     optional_deps=$(get_optional_deps "$package")
     if [ $? -ne 0 ]; then
@@ -58,8 +113,11 @@ main() {
         return 1
     fi
 
-    # Print the optional dependencies
-    echo "$optional_deps"
+    # Use the function get_selections to create and echo a summary of the optional dependencies to be installed/removed
+    selections=$(get_selections "$optional_deps")
+
+    # Print the selections
+    echo "$selections"
 }
 
 # Call the main function with all script arguments
