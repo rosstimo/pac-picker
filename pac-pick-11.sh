@@ -1,10 +1,7 @@
 #!/bin/bash
-
-# script safety measures
-#TODO add more detailed explination
-set -o errexit # Exit on error
-set -o nounset # Trigger error when expanding unset variables
-set -o pipefail # Exit when a command in a pipeline fails
+set -o errexit
+set -o nounset
+set -o pipefail
 
 # Function: is_installed
 # Purpose: Checks if a given package is installed using pacman.
@@ -26,7 +23,7 @@ is_installed() {
 # Arguments: 
 #   $1 - The name of the package to check.
 # Returns: 
-#   A list of optional dependencies with their descriptstepsions and installation status.
+#   A list of optional dependencies with their descriptions and installation status.
 get_optional_deps() {
     local package=$1
     # Extract optional dependencies from pacman information.
@@ -152,10 +149,6 @@ test_get_selections() {
 
 # Function: run_tests
 # Purpose: Runs all test functions.
-# TODO add more detailed explination in stdout messages
-# TODO instructions as to what to look for when testing gui/tui features
-# TODO Where appropriate use fake data to test the functions
-# TODO output detailed teste results to a time stamped log file
 run_tests() {
     test_is_installed
     test_get_optional_deps
