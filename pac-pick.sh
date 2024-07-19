@@ -100,12 +100,6 @@ main() {
 
     local package=$1
 
-    # Check if the package is already installed
-    if is_installed "$package"; then
-        echo "Package '$package' is already installed."
-        return 0
-    fi
-
     # Capture the result of get_optional_deps
     optional_deps=$(get_optional_deps "$package")
     if [ $? -ne 0 ]; then
