@@ -90,6 +90,12 @@ get_selections() {
     echo "Not selected items: ${not_selected_items[@]}"
 }
 
+# run tests
+run_tests ()
+{
+  #TODO: Add tests
+}
+
 # Main function
 main() {
     # Verify there is at least one argument or show Usage
@@ -117,3 +123,24 @@ main() {
 # Call the main function with all script arguments
 main "$@"
 
+# make sure there is an argument else show usage
+#
+# show welcome screen using dialog
+#
+# check if yay is installed
+#   yes: use dialog. ask user to select continue with yay or use pacman
+#   no: use pacman
+#
+# use the selected pacman/yay to check if the $package is valid/installable. if not show message and exit 
+#  if found run get_optional_deps if none continue
+#  if one or more run get_selections 
+#    use dialog. inform the user that there are optional dependencies
+#    use dialog. the user can choose all, none or custom
+#    if all contionue with a list of all optional dependencies to install
+#    if none continue and don't install or remove any optional dependencies
+#    if custom
+#       use selected items to create a list of packages to install (--needed)
+#       use not selected items to create a list of packages to remove (only if installed)
+# use dialog. show a summary of the packages to be installed and removed
+# ask user to confirm or cancel
+# if confirm perform remove then perform install
