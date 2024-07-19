@@ -5,11 +5,18 @@ set -o errexit  # Exit immediately if a command exits with a non-zero status.
 set -o nounset  # Treat unset variables as an error and exit immediately.
 set -o pipefail # Return the exit status of the last command in the pipeline that failed.
 
+# Function: show_welcome_screen
+# Purpose: Displays a welcome screen using dialog.
+show_welcome_screen() {
+    dialog --title "Welcome" --msgbox "Welcome to the pac-pick script! This script helps you manage optional dependencies for packages." 10 50
+    clear
+}
+
 # Function: is_installed
 # Purpose: Checks if a given package is installed using pacman.
-# Arguments: 
+# Arguments:
 #   $1 - The name of the package to check.
-# Returns: 
+# Returns:
 #   0 if the package is installed, 1 otherwise.
 is_installed() {
     local package=$1
@@ -20,11 +27,39 @@ is_installed() {
     fi
 }
 
+# Function: is_yay_installed
+# Purpose: Checks if yay is installed.
+# Returns:
+#   0 if yay is installed, 1 otherwise.
+is_yay_installed() {
+    if command -v yay &> /dev/null; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# Function: select_package_manager
+# Purpose: Asks the user to select whether to continue with yay or use pacman.
+# Returns:
+#   The selected package manager (yay or pacman).
+select_package_manager() {
+    local choice=$(dialog --title "Select Package Manager" --menu "yay is installed. Select package manager to use:" 15 50 2 \
+        1 "yay" \
+        2 "pacman" 2>&1 >/dev/tty)
+    clear
+    if [ "$choice" -eq 1 ]; then
+        echo "yay"
+    else
+        echo "pacman"
+    fi
+}
+
 # Function: get_optional_deps
 # Purpose: Retrieves optional dependencies of a given package and checks their installation status.
-# Arguments: 
+# Arguments:
 #   $1 - The name of the package to check.
-# Returns: 
+# Returns:
 #   A list of optional dependencies with their descriptions and installation status.
 get_optional_deps() {
     local package=$1
@@ -52,9 +87,9 @@ get_optional_deps() {
 
 # Function: get_selections
 # Purpose: Creates a menu of optional dependencies using dialog and captures user selections.
-# Arguments: 
+# Arguments:
 #   $1 - A list of optional dependencies with their descriptions and installation status.
-# Returns: 
+# Returns:
 #   Lists of selected and not selected items.
 get_selections() {
     local optional_deps="$1"
@@ -94,23 +129,38 @@ get_selections() {
 
 # Function: main
 # Purpose: Main script logic to handle user input and manage optional dependencies.
-# Arguments: 
+# Arguments:
 #   $@ - The package name to check.
 main() {
     if [ $# -lt 1 ]; then
-        echo "Usage: $0 <package>"
+        echo "Usage: $0 <package_name>"
         return 1
     fi
-    local package=$1
-    # Capture the result of get_optional_deps.
+    local package=${1:-}
+    if [ -z "$package" ]; then
+        echo "Error: Package name is required."
+        return 1
+    fi
+
+    # Show the welcome screen
+    show_welcome_screen
+
+    # Check if yay is installed and prompt user to select package manager
+    local package_manager="pacman"
+    if is_yay_installed; then
+        package_manager=$(select_package_manager)
+    fi
+
+    echo "Using package manager: $package_manager"
+    echo "Checking optional dependencies for package: $package"
     optional_deps=$(get_optional_deps "$package")
     if [ $? -ne 0 ]; then
         echo "Error: Could not get optional dependencies for $package"
         return 1
     fi
-    # Create and echo a summary of the optional dependencies to be installed/removed.
+    echo "Retrieved optional dependencies for $package"
     selections=$(get_selections "$optional_deps")
-    echo "$selections"
+    echo "User selections: $selections"
 }
 
 # Test function for is_installed
@@ -128,19 +178,20 @@ test_is_installed() {
 
 # Test function for get_optional_deps
 # Purpose: Tests the get_optional_deps function.
+# TODO use the test method from the dialogexample.sh if passes test with vlc package
+# TODO: user will have to look at dialog and confirm if the output is correct
 test_get_optional_deps() {
-    output=$(get_optional_deps bash)
-    if [[ "$output" == *"readline"* ]]; then
-        echo "test_get_optional_deps passed"
-    else
-        echo "test_get_optional_deps failed"
-    fi
+    local package="vlc"
+    local output=$(get_optional_deps "$package")
+    echo "Output of get_optional_deps for $package:"
+    echo "$output"
+    echo "Please confirm if the output is correct."
 }
 
 # Test function for get_selections
 # Purpose: Tests the get_selections function.
 test_get_selections() {
-    optional_deps="readline: GNU readline library: 1"
+    local optional_deps="readline: GNU readline library: 1"
     output=$(echo "$optional_deps" | get_selections)
     if [[ "$output" == *"Selected items: readline"* ]]; then
         echo "test_get_selections passed"
@@ -149,21 +200,8 @@ test_get_selections() {
     fi
 }
 
-# Test function for get_optional_deps with fake data
-# Purpose: Tests the get_optional_deps function with fake data.
-test_get_optional_deps_fake() {
-    fake_data="Optional Deps : fakepkg1: Fake package 1 description
-fakepkg2: Fake package 2 description"
-    output=$(echo "$fake_data" | get_optional_deps)
-    if [[ "$output" == *"fakepkg1"* ]] && [[ "$output" == *"fakepkg2"* ]]; then
-        echo "test_get_optional_deps_fake passed"
-    else
-        echo "test_get_optional_deps_fake failed"
-    fi
-}
-
 # Function: run_tests
-# Purpose: Runs all test functions and logs results to a timestamped file.
+# Purpose: Runs all test functions and logs results to a timestamped log file.
 run_tests() {
     local log_file="test_results_$(date +%Y%m%d_%H%M%S).log"
     {
@@ -173,35 +211,56 @@ run_tests() {
         test_get_optional_deps
         echo "Running test_get_selections..."
         test_get_selections
-        echo "Running test_get_optional_deps_fake..."
-        test_get_optional_deps_fake
         echo "All tests completed."
     } | tee "$log_file"
 }
 
-# Uncomment the following line to run tests
- run_tests
+# Function: show_help
+# Purpose: Displays help message for the script.
+show_help() {
+    echo "Usage: $0 [--debug] <package_name>"
+    echo
+    echo "Options:"
+    echo "  --debug    Run tests instead of the main script."
+    echo "  -h, --help Show this help message."
+}
 
-# Uncomment the following line to run the main function
-# main "$@"
+# Parse command-line arguments
+if [[ $# -eq 0 ]]; then
+    show_help
+    exit 1
+fi
+
+case "$1" in
+    --debug)
+        run_tests
+        ;;
+    -h|--help)
+        show_help
+        ;;
+    *)
+        main "$@"
+        ;;
+esac
 
 # Plan Outline
-# [ ] 1. Show welcome screen using dialog
-# [ ] 2. Check if yay is installed
-# [ ]    - Yes: Use dialog to ask user to select continue with yay or use pacman
-# [ ]    - No: Use pacman
-# [ ] 3. Use the selected pacman/yay to check if the $package is valid/installable. If not, show message and exit
-# [ ] 4. If found, run get_optional_deps. If none, continue
-# [ ] 5. If one or more, run get_selections
-# [ ] 6. Use dialog to inform the user that there are optional dependencies
-# [x] 7. Use dialog to let the user choose all, none, or custom
-# [ ]    - If all, continue with a list of all optional dependencies to install
-# [ ]    - If none, continue and don't install or remove any optional dependencies
-# [ ]    - If custom, use selected items to create a list of packages to install (--needed)
-# [x]    - Use not selected items to create a list of packages to remove (only if installed)
-# [ ] 8. Use dialog to show a summary of the packages to be installed and removed
-# [ ] 9. Ask user to confirm or cancel
-# [ ] 10. If confirm, perform remove then perform install
-# [ ] 11. Add tests for all functions
-# [ ] 12. run shell check and fix as needed
-# [ ] 13. update comments and documentation
+# 1. [x] Show welcome screen using dialog
+# 2. [x] Check if yay is installed
+#    - [x] Yes: Use dialog to ask user to select continue with yay or use pacman
+#    - [x] No: Use pacman
+# 3. [ ] Use the selected pacman/yay to check if the $package is valid/installable. If not, show message and exit
+# 4. [ ] If found, run get_optional_deps. If none, continue
+# 5. [ ] If one or more, run get_selections
+# 6. [ ] Use dialog to inform the user that there are optional dependencies
+# 7. [ ] Use dialog to let the user choose all, none, or custom
+#    - [ ] If all, continue with a list of all optional dependencies to install
+#    - [ ] If none, continue and don't install or remove any optional dependencies
+#    - [ ] If custom, use selected items to create a list of packages to install (--needed)
+#      - [ ] Use not selected items to create a list of packages to remove (only if installed)
+# 8. [ ] Use dialog to show a summary of the packages to be installed and removed
+# 9. [ ] Ask user to confirm or cancel
+# 10. [ ] If confirm, perform remove then perform install
+# 11. [ ] Add tests for all functions
+# 12. [ ] Run shell check and fix as needed
+# 13. [ ] Update comments and documentation
+
