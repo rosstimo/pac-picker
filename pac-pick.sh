@@ -67,22 +67,15 @@ is_package_valid() {
     local package=$2
     local output
 
-    if [[ "$package_manager" == "yay" ]]; then
-        output=$(yay -Si "$package" 2>&1)
-        if [[ -z "$output" ]]; then
-            return 1
-        else
-            return 0
-        fi
+    output=$("$package_manager" -Si "$package" 2>&1)
+    if [[ -z "$output" ]] || echo "$output" | grep -q '^error:'; then
+      return 1
     else
-        output=$(pacman -Si "$package" 2>&1)
-        if echo "$output" | grep -q '^error:'; then
-            return 1
-        else
-            return 0
-        fi
+      return 0
     fi
+    
 }
+
 # Function: get_optional_deps
 # Purpose: Retrieves optional dependencies of a given package and checks their installation status.
 # Arguments:
