@@ -69,11 +69,10 @@ is_package_valid() {
 
     output=$("$package_manager" -Si "$package" 2>&1)
     if [[ -z "$output" ]] || echo "$output" | grep -q '^error:'; then
-      return 1
+        return 1
     else
-      return 0
+        return 0
     fi
-    
 }
 
 # Function: get_optional_deps
@@ -235,8 +234,19 @@ main() {
             ;;
         3)  # Custom
             selections=$(get_selections "$optional_deps")
-            install_list=$(echo "$selections" | grep "Selected items:" | cut -d':' -f2)
-            remove_list=$(echo "$selections" | grep "Not selected items:" | cut -d':' -f2)
+            selected_items=$(echo "$selections" | grep "Selected items:" | cut -d':' -f2)
+            not_selected_items=$(echo "$selections" | grep "Not selected items:" | cut -d':' -f2)
+            # Filter packages to install and remove
+            for item in $selected_items; do
+                if ! is_installed "$item"; then
+                    install_list+="$item "
+                fi
+            done
+            for item in $not_selected_items; do
+                if is_installed "$item"; then
+                    remove_list+="$item "
+                fi
+            done
             ;;
     esac
 
@@ -351,9 +361,9 @@ esac
 #    - [x] If none, continue and don't install or remove any optional dependencies
 #    - [x] If custom, use selected items to create a list of packages to install (--needed)
 #      - [x] Use not selected items to create a list of packages to remove (only if installed)
-# 8. [ ] Use dialog to show a summary of the packages to be installed and removed
-# 9. [ ] Ask user to confirm or cancel
-# 10. [ ] If confirm, perform remove then perform install
+# 8. [x] Use dialog to show a summary of the packages to be installed and removed
+# 9. [x] Ask user to confirm or cancel
+# 10. [x] If confirm, perform remove then perform install
 # 11. [ ] Add tests for all functions
 # 12. [ ] Run shell check and fix as needed
 # 13. [ ] Update comments and documentation
