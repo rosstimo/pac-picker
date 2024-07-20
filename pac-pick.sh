@@ -62,20 +62,27 @@ select_package_manager() {
 #   $2 - The name of the package to check.
 # Returns:
 #   0 if the package is valid, 1 otherwise.
-#   TODO: fix or remove. had to force return 0 to continue with the script
-#   TODO: the function is not working as expected. says vlc is not valid
-#   TODO: may be due to the redirection of stderr to /dev/null
-#   TODO: yay will return an empty line pacman will return a line that begins with 'error'
 is_package_valid() {
     local package_manager=$1
     local package=$2
-    if $package_manager -Si "$package" &> /dev/null; then
-        return 0
+    local output
+
+    if [[ "$package_manager" == "yay" ]]; then
+        output=$(yay -Si "$package" 2>&1)
+        if [[ -z "$output" ]]; then
+            return 1
+        else
+            return 0
+        fi
     else
-        return 0
+        output=$(pacman -Si "$package" 2>&1)
+        if echo "$output" | grep -q '^error:'; then
+            return 1
+        else
+            return 0
+        fi
     fi
 }
-
 # Function: get_optional_deps
 # Purpose: Retrieves optional dependencies of a given package and checks their installation status.
 # Arguments:
