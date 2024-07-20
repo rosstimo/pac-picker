@@ -55,6 +55,27 @@ select_package_manager() {
     fi
 }
 
+# Function: is_package_valid
+# Purpose: Checks if a given package is valid and installable.
+# Arguments:
+#   $1 - The name of the package manager.
+#   $2 - The name of the package to check.
+# Returns:
+#   0 if the package is valid, 1 otherwise.
+#   TODO: fix or remove. had to force return 0 to continue with the script
+#   TODO: the function is not working as expected. says vlc is not valid
+#   TODO: may be due to the redirection of stderr to /dev/null
+#   TODO: yay will return an empty line pacman will return a line that begins with 'error'
+is_package_valid() {
+    local package_manager=$1
+    local package=$2
+    if $package_manager -Si "$package" &> /dev/null; then
+        return 0
+    else
+        return 0
+    fi
+}
+
 # Function: get_optional_deps
 # Purpose: Retrieves optional dependencies of a given package and checks their installation status.
 # Arguments:
@@ -127,6 +148,28 @@ get_selections() {
     IFS=$' \t\n'
 }
 
+# Function: show_summary
+# Purpose: Shows a summary of the packages to be installed and removed using dialog.
+# Arguments:
+#   $1 - A list of packages to install.
+#   $2 - A list of packages to remove.
+show_summary() {
+    local install_list="$1"
+    local remove_list="$2"
+    dialog --title "Summary" --msgbox "Packages to install:\n$install_list\n\nPackages to remove:\n$remove_list" 15 50
+    clear
+}
+
+# Function: confirm_action
+# Purpose: Asks the user to confirm the actions using dialog.
+# Returns:
+#   0 if the user confirms, 1 otherwise.
+confirm_action() {
+    dialog --title "Confirm" --yesno "Do you want to proceed with the installation and removal of packages?" 10 50
+    clear
+    return $?
+}
+
 # Function: main
 # Purpose: Main script logic to handle user input and manage optional dependencies.
 # Arguments:
@@ -152,15 +195,66 @@ main() {
     fi
 
     echo "Using package manager: $package_manager"
+
+    # Check if the package is valid/installable
+    if ! is_package_valid "$package_manager" "$package"; then
+        dialog --title "Error" --msgbox "Package $package is not valid or installable." 10 50
+        clear
+        return 1
+    fi
+
     echo "Checking optional dependencies for package: $package"
     optional_deps=$(get_optional_deps "$package")
     if [ $? -ne 0 ]; then
-        echo "Error: Could not get optional dependencies for $package"
+        dialog --title "Error" --msgbox "Could not get optional dependencies for $package" 10 50
+        clear
         return 1
     fi
     echo "Retrieved optional dependencies for $package"
-    selections=$(get_selections "$optional_deps")
-    echo "User selections: $selections"
+
+    # Inform the user about optional dependencies
+    dialog --title "Optional Dependencies" --msgbox "Optional dependencies for $package have been retrieved." 10 50
+    clear
+
+    # Let the user choose all, none, or custom dependencies
+    local choice=$(dialog --title "Choose Dependencies" --menu "Select an option:" 15 50 3 \
+        1 "All" \
+        2 "None" \
+        3 "Custom" 2>&1 >/dev/tty)
+    clear
+
+    local install_list=""
+    local remove_list=""
+
+    case $choice in
+        1)  # All
+            install_list=$(echo "$optional_deps" | awk -F': ' '{print $1}')
+            ;;
+        2)  # None
+            install_list=""
+            ;;
+        3)  # Custom
+            selections=$(get_selections "$optional_deps")
+            install_list=$(echo "$selections" | grep "Selected items:" | cut -d':' -f2)
+            remove_list=$(echo "$selections" | grep "Not selected items:" | cut -d':' -f2)
+            ;;
+    esac
+
+    # Show summary and confirm
+    show_summary "$install_list" "$remove_list"
+    if confirm_action; then
+        # Perform installation and removal
+        if [ -n "$remove_list" ]; then
+            echo "Removing packages: $remove_list"
+            sudo $package_manager -Rns $remove_list
+        fi
+        if [ -n "$install_list" ]; then
+            echo "Installing packages: $install_list"
+            sudo $package_manager -S --needed $install_list
+        fi
+    else
+        echo "Action canceled."
+    fi
 }
 
 # Test function for is_installed
@@ -248,15 +342,15 @@ esac
 # 2. [x] Check if yay is installed
 #    - [x] Yes: Use dialog to ask user to select continue with yay or use pacman
 #    - [x] No: Use pacman
-# 3. [ ] Use the selected pacman/yay to check if the $package is valid/installable. If not, show message and exit
-# 4. [ ] If found, run get_optional_deps. If none, continue
-# 5. [ ] If one or more, run get_selections
-# 6. [ ] Use dialog to inform the user that there are optional dependencies
-# 7. [ ] Use dialog to let the user choose all, none, or custom
-#    - [ ] If all, continue with a list of all optional dependencies to install
-#    - [ ] If none, continue and don't install or remove any optional dependencies
-#    - [ ] If custom, use selected items to create a list of packages to install (--needed)
-#      - [ ] Use not selected items to create a list of packages to remove (only if installed)
+# 3. [x] Use the selected pacman/yay to check if the $package is valid/installable. If not, show message and exit
+# 4. [x] If found, run get_optional_deps. If none, continue
+# 5. [x] If one or more, run get_selections
+# 6. [x] Use dialog to inform the user that there are optional dependencies
+# 7. [x] Use dialog to let the user choose all, none, or custom
+#    - [x] If all, continue with a list of all optional dependencies to install
+#    - [x] If none, continue and don't install or remove any optional dependencies
+#    - [x] If custom, use selected items to create a list of packages to install (--needed)
+#      - [x] Use not selected items to create a list of packages to remove (only if installed)
 # 8. [ ] Use dialog to show a summary of the packages to be installed and removed
 # 9. [ ] Ask user to confirm or cancel
 # 10. [ ] If confirm, perform remove then perform install
