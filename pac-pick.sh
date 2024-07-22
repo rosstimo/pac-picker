@@ -193,19 +193,19 @@ main() {
         package_manager=$(select_package_manager)
     fi
 
-    echo "Using package manager: $package_manager"
-
     # Check if the package is valid/installable
+    # run the is_package_valid function passing the package_manager and package_manager
+    # if the return value is 1, show an error message and exit
+    # TODO: this never hits the error message.FIX
     if ! is_package_valid "$package_manager" "$package"; then
         dialog --title "Error" --msgbox "Package $package is not valid or installable." 10 50
-        clear
-        return 1
+        return 1 # exit the script
     fi
 
-    echo "Checking optional dependencies for package: $package"
+    # echo "Checking optional dependencies for package: $package"
     optional_deps=$(get_optional_deps "$package")
     if [ $? -ne 0 ]; then
-        dialog --title "Error" --msgbox "Could not get optional dependencies for $package" 10 50
+        dialog --title "Error" --msgbox "Could not get optional dependencies for $package is not installable with $package_manager" 10 50
         clear
         return 1
     fi
@@ -267,85 +267,87 @@ main() {
     fi
 }
 
-# Test function for is_installed
-# Purpose: Tests the is_installed function.
-test_is_installed() {
-    pacman -Q bash &> /dev/null
-    if [ $? -eq 0 ]; then
-        is_installed bash
-        [ $? -eq 0 ] && echo "test_is_installed passed" || echo "test_is_installed failed"
-    else
-        is_installed non_existent_package
-        [ $? -eq 1 ] && echo "test_is_installed passed" || echo "test_is_installed failed"
-    fi
-}
+main "$@"
 
-# Test function for get_optional_deps
-# Purpose: Tests the get_optional_deps function.
-# TODO use the test method from the dialogexample.sh if passes test with vlc package
-# TODO: user will have to look at dialog and confirm if the output is correct
-test_get_optional_deps() {
-    local package="vlc"
-    local output=$(get_optional_deps "$package")
-    echo "Output of get_optional_deps for $package:"
-    echo "$output"
-    echo "Please confirm if the output is correct."
-}
-
-# Test function for get_selections
-# Purpose: Tests the get_selections function.
-test_get_selections() {
-    local optional_deps="readline: GNU readline library: 1"
-    output=$(echo "$optional_deps" | get_selections)
-    if [[ "$output" == *"Selected items: readline"* ]]; then
-        echo "test_get_selections passed"
-    else
-        echo "test_get_selections failed"
-    fi
-}
-
-# Function: run_tests
-# Purpose: Runs all test functions and logs results to a timestamped log file.
-run_tests() {
-    local log_file="test_results_$(date +%Y%m%d_%H%M%S).log"
-    {
-        echo "Running test_is_installed..."
-        test_is_installed
-        echo "Running test_get_optional_deps..."
-        test_get_optional_deps
-        echo "Running test_get_selections..."
-        test_get_selections
-        echo "All tests completed."
-    } | tee "$log_file"
-}
-
-# Function: show_help
-# Purpose: Displays help message for the script.
-show_help() {
-    echo "Usage: $0 [--debug] <package_name>"
-    echo
-    echo "Options:"
-    echo "  --debug    Run tests instead of the main script."
-    echo "  -h, --help Show this help message."
-}
-
-# Parse command-line arguments
-if [[ $# -eq 0 ]]; then
-    show_help
-    exit 1
-fi
-
-case "$1" in
-    --debug)
-        run_tests
-        ;;
-    -h|--help)
-        show_help
-        ;;
-    *)
-        main "$@"
-        ;;
-esac
+# # Test function for is_installed
+# # Purpose: Tests the is_installed function.
+# test_is_installed() {
+#     pacman -Q bash &> /dev/null
+#     if [ $? -eq 0 ]; then
+#         is_installed bash
+#         [ $? -eq 0 ] && echo "test_is_installed passed" || echo "test_is_installed failed"
+#     else
+#         is_installed non_existent_package
+#         [ $? -eq 1 ] && echo "test_is_installed passed" || echo "test_is_installed failed"
+#     fi
+# }
+#
+# # Test function for get_optional_deps
+# # Purpose: Tests the get_optional_deps function.
+# # TODO use the test method from the dialogexample.sh if passes test with vlc package
+# # TODO: user will have to look at dialog and confirm if the output is correct
+# test_get_optional_deps() {
+#     local package="vlc"
+#     local output=$(get_optional_deps "$package")
+#     echo "Output of get_optional_deps for $package:"
+#     echo "$output"
+#     echo "Please confirm if the output is correct."
+# }
+#
+# # Test function for get_selections
+# # Purpose: Tests the get_selections function.
+# test_get_selections() {
+#     local optional_deps="readline: GNU readline library: 1"
+#     output=$(echo "$optional_deps" | get_selections)
+#     if [[ "$output" == *"Selected items: readline"* ]]; then
+#         echo "test_get_selections passed"
+#     else
+#         echo "test_get_selections failed"
+#     fi
+# }
+#
+# # Function: run_tests
+# # Purpose: Runs all test functions and logs results to a timestamped log file.
+# run_tests() {
+#     local log_file="test_results_$(date +%Y%m%d_%H%M%S).log"
+#     {
+#         echo "Running test_is_installed..."
+#         test_is_installed
+#         echo "Running test_get_optional_deps..."
+#         test_get_optional_deps
+#         echo "Running test_get_selections..."
+#         test_get_selections
+#         echo "All tests completed."
+#     } | tee "$log_file"
+# }
+#
+# # Function: show_help
+# # Purpose: Displays help message for the script.
+# show_help() {
+#     echo "Usage: $0 [--debug] <package_name>"
+#     echo
+#     echo "Options:"
+#     echo "  --debug    Run tests instead of the main script."
+#     echo "  -h, --help Show this help message."
+# }
+#
+# # Parse command-line arguments
+# if [[ $# -eq 0 ]]; then
+#     show_help
+#     exit 1
+# fi
+#
+# case "$1" in
+#     --debug)
+#         run_tests
+#         ;;
+#     -h|--help)
+#         show_help
+#         ;;
+#     *)
+#         main "$@"
+#         ;;
+# esac
 
 # Plan Outline
 # 1. [x] Show welcome screen using dialog
