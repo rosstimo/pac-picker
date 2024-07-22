@@ -48,6 +48,78 @@ is_installed() {
     fi
 }
 
+# check if yay is installed
+is_yay_installed() {
+    if command -v yay &> /dev/null; then
+        return 0
+    else
+        return 1
+    fi
+}
+
+# user selected package manager (yay or pacman).
+select_package_manager() {
+    local choice=$(dialog --title "Select Package Manager"  --menu "yay is installed. Select package manager to use:" 32 64 2 \
+        1 "pacman" \
+        2 "yay" 2>&1 >/dev/tty)
+    if [ "$choice" -eq 2 ]; then
+        echo "yay"
+    else
+        echo "pacman"
+    fi
+}
+
+# Checks if a given package is valid and installable with the selected package manager.
+is_package_valid() {
+    local package_manager=$1
+    local package=$2
+    local output
+    output=$("$package_manager" -Si "$package" 2>&1)
+    if [[ -z "$output" ]] || echo "$output" | grep -q '^error:'; then
+        return 1
+    else
+        return 0
+    fi
+}
+
+# choose between all, no change, custom
+get_selection_choice() {
+  local choice=$(dialog --title "Select Optional Dependency Installation"  --menu "Select how to install optional  dependencies:" 32 64 3 \
+        1 "Install All" \
+        2 "No Change" \
+        3 "Custom" 2>&1 >/dev/tty)
+    echo $choice
+}
+
+# Returns a list of all optional dependencies of a package.
+
+select_all_optdeps () {
+    local optional_deps="$1"
+    local selected_items=()
+    IFS=$'\n'  # Set the Internal Field Separator to newline, which helps in correctly parsing the multiline input.
+    # Process each line of the optional dependencies.
+    for line in $optional_deps; do
+        package_name=$(echo "$line" | cut -d':' -f1)
+        # Add all package names to the selected items list.
+        selected_items+=("$package_name")
+    done
+    # Return all items as selected.
+    echo "Selected items: ${selected_items[@]}"
+    IFS=$' \t\n'  # Reset IFS to default of space, tab, and newline.
+}
+select_all_optional_deps() {
+    local optional_deps="$1"
+    local selected_items=()
+    local not_selected_items=()
+    IFS=$'\n'
+    for line in $optional_deps; do
+        package_name=$(echo "$line" | cut -d':' -f1)
+        selected_items+=("$package_name")
+    done
+    echo "Selected items: ${selected_items[@]}"
+    echo "Not selected items: ${not_selected_items[@]}"  # Always empty
+    IFS=$' \t\n'
+}
 # Returns a list of optional dependencies with their descriptions and installation status.
 # TODO: might be fun to run this recursivly to get all optional dependencies of all optional dependencies
 # TODO: may want to include a max depth argument to limit recursion
@@ -78,7 +150,7 @@ get_optional_deps() {
 }
 
 #   Returns lists`` of selected and not selected items.
-get_selections() {
+get_selections-old() {
     local optional_deps="$1"
     local dialog_items=()
     IFS=$'\n'  # Set the Internal Field Separator to newline, which helps in correctly parsing the multiline input.
@@ -96,7 +168,6 @@ get_selections() {
     done
     # Create a dialog checklist of optional dependencies.
     choices=$(dialog --separate-output --checklist "Select optional dependencies to install:" 32 64 10 "${dialog_items[@]}" 2>&1 >/dev/tty)
-    clear
     local selected_items=()
     local not_selected_items=()
     # Convert choices to an array.
@@ -112,6 +183,35 @@ get_selections() {
     echo "Selected items: ${selected_items[@]}"
     echo "Not selected items: ${not_selected_items[@]}"
     IFS=$' \t\n'  # Reset IFS to default of space, tab, and newline.
+}
+
+get_selections() {
+    local optional_deps="$1"
+    local dialog_items=()
+    IFS=$'\n'
+    for line in $optional_deps; do
+        package_name=$(echo "$line" | cut -d':' -f1)
+        description=$(echo "$line" | cut -d':' -f2)
+        installed=$(echo "$line" | cut -d':' -f3)
+        if [ "$installed" -eq 1 ]; then
+            dialog_items+=("$package_name" "$description" "on")
+        else
+            dialog_items+=("$package_name" "$description" "off")
+        fi
+    done
+    choices=$(dialog --separate-output --checklist "Select optional dependencies to install:" 32 64 10 "${dialog_items[@]}" 2>&1 >/dev/tty)
+    local selected_items=()
+    local not_selected_items=()
+    IFS=$'\n' read -d '' -r -a selected_items <<< "$choices"
+    for line in $optional_deps; do
+        package_name=$(echo "$line" | cut -d':' -f1)
+        if ! [[ " ${selected_items[@]} " =~ " ${package_name} " ]]; then
+            not_selected_items+=("$package_name")
+        fi
+    done
+    echo "Selected items: ${selected_items[@]}"
+    echo "Not selected items: ${not_selected_items[@]}"
+    IFS=$' \t\n'
 }
 
 # Returns a list of packages selected to install.
@@ -158,46 +258,77 @@ main() {
 
   # Call the get_optional_deps function with the package name as an argument.
   local package="vlc" #to be replaced with user input 
-  local package_manager="pacman" #to be replaced with user choice
   local timeout=2
   #check for yay. if installed prompt user to choose between yay and pacman
   #otherwise no prompt and use pacman
+  local package_manager="pacman" #to be replaced with user choice
+  if is_yay_installed; then
+    package_manager=$(select_package_manager)
+  fi
+
+  #check if package is valid
+  if ! is_package_valid $package_manager "$package"; then
+    show_message "Package $package is not installable using $package_manager" 1
+    exit 1
+  else
+    show_message "Package $package is installable using $package_manager" 1
+  fi
 
   #check if package exists
-  if ! get_package_info "$package" "$package_manager"; then
-    show_message "Package $package not found useing $package_manager" 1
-    exit 1
-  fi
+  # if ! get_package_info "$package" "$package_manager"; then
+  #   show_message "Package $package not found useing $package_manager" 1
+  #   exit 1
+  # fi
   
-  show_message "Package found" $timeout
+  # show_message "Package found" $timeout
   #get package info
   local package_info=$(get_package_info "$package" "$package_manager")
-  show_message "$package_info" $timeout 
+  # show_message "$package_info" $timeout 
+  
   #get optional dependencies
   local optional_deps=$(get_optional_deps "$package" "$package_manager")
-  show_message "$optional_deps" $timeout
+  # show_message "$optional_deps" $timeout
+
   #prompt all, no change, custom
   #if all install all
   #if no change install primary package only
   #if custom, show optional dependencies and prompt user to select which to install
   #and deselect which to remove
+  # local install_list=""
+  # local uninstall_list=""
+  
+  local selections=$(select_all_optional_deps "$optional_deps")
+  local selection_choice=$(get_selection_choice)
+  # show_message "$selection_choice" 0 "Selection Choice"
+
+  case $selection_choice in
+    1)
+      selections=$(select_all_optional_deps "$optional_deps")
+      ;;
+    2)
+      selections="" #$(select_no_optional_deps "$optional_deps")
+      ;;
+    3)
+      selections=$(get_selections "$optional_deps")
+      ;;
+  esac
+
+  # show_message "$selections" 0 "Selections"
+  # Filter packages to install and remove
+  local install_list=$(get_install_list "$selections")
+  local uninstall_list=$(get_uninstall_list "$selections") 
+  show_message "$install_list" 0 "Install List"
+  show_message "$uninstall_list" 0 "Remove List"
+  
+
   #finalize install and remove lists
+
   #prompt user to review and confirm
 
 
-  # determine selected/unselected items then filter out to be installed/uninstalled lists
-  local selections=$(get_selections "$optional_deps")
-  show_message "$selections" 0 "Selections"
-
-  # Filter packages to install and remove
-  local install_list=$(get_install_list "$selections")
-  show_message "$install_list" 0 "Install List"
-
-  local uninstall_list=$(get_uninstall_list "$selections") 
-  show_message "$uninstall_list" 0 "Remove List"
-  clear 
-  remove_packages "$uninstall_list"
-  install_packages "$install_list"
+  # clear 
+  # remove_packages "$uninstall_list"
+  # install_packages "$install_list"
 
 
 }
