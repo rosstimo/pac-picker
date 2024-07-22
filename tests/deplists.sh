@@ -5,7 +5,10 @@ show_output() {
   local command=$1
   local message=$2
   local timeout=$3
-  dialog --timeout $timeout --programbox "$message"  38 64 < <(
+  if [[ -z "$timeout" ]]; then
+    timeout=0
+  fi
+  dialog --timeout $timeout --programbox "$message"  32 64 < <(
     $command
   )
 }
@@ -14,7 +17,12 @@ show_output() {
 show_message() {
   local message=$1
   local timeout=$2
-  dialog --timeout $timeout --msgbox "$message"  38 64
+  local title=$3
+  local backtitle=$4
+  if [[ -z "$timeout" ]]; then
+    timeout=0
+  fi
+  dialog  --timeout $timeout --title "$title" --backtitle "$backtitle" --msgbox "$message"  32 64
 }
 
 # attempt to get package information using the package package manager
@@ -131,7 +139,7 @@ get_selections() {
         fi
     done
     # Create a dialog checklist of optional dependencies.
-    choices=$(dialog --separate-output --checklist "Select optional dependencies to install:" 15 50 10 "${dialog_items[@]}" 2>&1 >/dev/tty)
+    choices=$(dialog --separate-output --checklist "Select optional dependencies to install:" 32 64 10 "${dialog_items[@]}" 2>&1 >/dev/tty)
     clear
     local selected_items=()
     local not_selected_items=()
@@ -176,6 +184,7 @@ main() {
   # Call the get_optional_deps function with the package name as an argument.
   local package="vlc"
   local package_manager="pacman"
+  local timeout=2
 
   # run get_package_info. if returnvalue is 1, show_message "not found" then exit
   # if returnvalue is 0, show_output, show_message "package found" and store package_info in a variable
@@ -184,16 +193,38 @@ main() {
     exit 1
   fi
   
-  show_message "Package found" 1
-  local package_info=$(get_package_info "$package" "$package_manager")
-  show_message "$package_info" 1 
-  local optional_deps=$(get_optional_deps "$package" "$package_manager")
-  show_message "$optional_deps" 1
-  get_selections "$optional_deps"
-  
-  
+  show_message "Package found" $timeout
 
-  
+  local package_info=$(get_package_info "$package" "$package_manager")
+  show_message "$package_info" $timeout 
+
+  local optional_deps=$(get_optional_deps "$package" "$package_manager")
+  show_message "$optional_deps" $timeout
+
+  local selections=$(get_selections "$optional_deps")
+  show_message "$selections" 0 "Selections"
+
+  local selected_items=$(echo "$selections" | grep "Selected items:" | cut -d':' -f2)
+  show_message "$selected_items" $timeout "Selected items"
+
+  local not_selected_items=$(echo "$selections" | grep "Not selected items:" | cut -d':' -f2)
+  show_message "$not_selected_items" $timeout "Not selected items"
+
+  # Filter packages to install and remove
+  for item in $selected_items; do
+    if ! is_installed "$item"; then
+      install_list+="$item "
+    fi
+  done
+  show_message "$install_list" $timeout "Install List"
+
+  for item in $not_selected_items; do
+    if is_installed "$item"; then
+      remove_list+="$item "
+    fi
+  done 
+  show_message "$remove_list" $timeout "Remove List"
+
 }
 
 main "$@"
