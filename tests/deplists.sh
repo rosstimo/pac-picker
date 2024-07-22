@@ -38,40 +38,7 @@ get_package_info() {
   fi
 }
 
-# extract the optional dependencies
-# return the optional dependencies in array format
-get_optdeps() {
-  local package=$1
-  local package_manager=$2
-  local optdeps=$($package_manager -Si "$package" | sed -n '/^Optional Deps/,/^Conflicts With/p' | sed '$d')
-        optdeps=$(echo "$optdeps" | sed 's/^Optional Deps *: //')
-  echo $optdeps
-}
-
-extract_optdeps() {
-  local package_info=$1
-  local optdeps=$(echo $package_info | sed -n '/^Optional Deps/,/^Conflicts With/p' | sed '$d')
-        optdeps=$(echo "$optdeps" | sed 's/^Optional Deps *: //')
-        # store the optional dependencies in optdeps_array
-        echo "$optdeps" | while read -r line; do
-          # Extract the package name and description.
-          local package_name=$(echo "$line" | cut -d':' -f1)
-          local description=$(echo "$line" | cut -d':' -f2-)
-          # add the package_name to the optdeps_array and description to descriptions_array
-          echo $package_name
-          # $optdep_names+=($package_name)
-          echo $description
-          # $optdep_descriptions+=($description)
-        done
-  # echo $optdeps_array, $descriptions_arrayd
-}
-
-# Function: is_installed
-# Purpose: Checks if a given package is installed using pacman.
-# Arguments:
-#   $1 - The name of the package to check.
-# Returns:
-#   0 if the package is installed, 1 otherwise.
+# Check if a given package is installed using pacman.
 is_installed() {
     local package=$1
     if pacman -Q "$package" &> /dev/null; then
@@ -81,21 +48,15 @@ is_installed() {
     fi
 }
 
-# Function: get_optional_deps
-# Purpose: Retrieves optional dependencies of a given package and checks their installation status.
-# Arguments:
-#   $1 - The name of the package to check.
-# Returns:
-#   A list of optional dependencies with their descriptions and installation status.
+# Returns a list of optional dependencies with their descriptions and installation status.
+# TODO: might be fun to run this recursivly to get all optional dependencies of all optional dependencies
+# TODO: may want to include a max depth argument to limit recursion
+# TODO: may want to somehow determine any either/or dependencies and prompt user to select one for each case
 get_optional_deps() {
     local package=$1
     local package_manager=$2
     local opt_deps=$($package_manager -Si "$package" | sed -n '/^Optional Deps/,/^Conflicts With/p' | sed '$d')
-    # local package_info=$1
-    # local opt_deps=$(echo $package_info | sed -n '/^Optional Deps/,/^Conflicts With/p' | sed '$d')
-    # local package=$1
-    # Extract optional dependencies from pacman information.
-    # local opt_deps=$(pacman -Si "$package" | sed -n '/^Optional Deps/,/^Conflicts With/p' | sed '$d')
+
     # Process each line to handle multiple colons and format the output.
     echo "$opt_deps" | while read -r line; do
         # Remove the "Optional Deps :" prefix from the first line.
@@ -116,16 +77,11 @@ get_optional_deps() {
     done
 }
 
-# Function: get_selections
-# Purpose: Creates a menu of optional dependencies using dialog and captures user selections.
-# Arguments:
-#   $1 - A list of optional dependencies with their descriptions and installation status.
-# Returns:
-#   Lists of selected and not selected items.
+#   Returns lists`` of selected and not selected items.
 get_selections() {
     local optional_deps="$1"
     local dialog_items=()
-    IFS=$'\n'
+    IFS=$'\n'  # Set the Internal Field Separator to newline, which helps in correctly parsing the multiline input.
     # Process each line of the optional dependencies.
     for line in $optional_deps; do
         package_name=$(echo "$line" | cut -d':' -f1)
@@ -155,10 +111,10 @@ get_selections() {
     # Return the selected and not selected items.
     echo "Selected items: ${selected_items[@]}"
     echo "Not selected items: ${not_selected_items[@]}"
-    # the following line 
-    # IFS=$' \t\n'
+    IFS=$' \t\n'  # Reset IFS to default of space, tab, and newline.
 }
 
+# Returns a list of packages selected to install.
 get_install_list () {
   local selections="$1"
   local selected_items=$(echo "$selections" | grep "Selected items:" | cut -d':' -f2)
@@ -170,6 +126,7 @@ get_install_list () {
   echo $install_list
 }
 
+# Returns a list of packages selected to remove.
 get_uninstall_list() {
   local selections="$1"
   local not_selected_items=$(echo "$selections" | grep "Not selected items:" | cut -d':' -f2)
@@ -181,78 +138,66 @@ get_uninstall_list() {
   echo $remove_list
 }
 
-main() {
-#   echo "call get_optdeps"
-#   optional_deps=$(get_optional_deps "$package")
-#
-#
-# # call get_optdeps with package vlc and suppress direct output and capture the result in a variable
-#   local optdeps=$(get_optdeps vlc)
-#   # echo $optdeps
-#   # convert the string to an array
-#   local optdeps_array=($optdeps)
-#   echo "iterate over the array and print each element"
-#   # iterate over the array and print each element
-#   for optdep in "${optdeps_array[@]}"; do
-#     echo $optdep
-#   done
-#   echo "done"
+# Removes a list of packages.
+# this won't remove anything needed by other packages
+# TODO: may want to add choice for --noconfirm flag
+remove_packages() {
+  local remove_list="$1"
+    sudo pacman -Rns $remove_list 
+}
 
-  # show_output "$package_manager -Si $package" "Retrieving Package Information" 1
-  # get_package_info "$package"
-  # local package_info=$(get_package_info "$package")
-  # local package_info=$(get_optdeps "$package") 
-  # echo $package_info
+# --needed flag probably redundant now that we have the get_install_list function 
+# but could be mor performent than bothering with get_install_list
+# TODO: may want to add choice for --noconfirm flag
+install_packages() {
+  local install_list="$1"
+  sudo pacman -S --needed $install_list
+}
+
+main() {
 
   # Call the get_optional_deps function with the package name as an argument.
-  local package="vlc"
-  local package_manager="pacman"
+  local package="vlc" #to be replaced with user input 
+  local package_manager="pacman" #to be replaced with user choice
   local timeout=2
+  #check for yay. if installed prompt user to choose between yay and pacman
+  #otherwise no prompt and use pacman
 
-  # run get_package_info. if returnvalue is 1, show_message "not found" then exit
-  # if returnvalue is 0, show_output, show_message "package found" and store package_info in a variable
+  #check if package exists
   if ! get_package_info "$package" "$package_manager"; then
-    show_message "Package not found" 1
+    show_message "Package $package not found useing $package_manager" 1
     exit 1
   fi
   
   show_message "Package found" $timeout
-
+  #get package info
   local package_info=$(get_package_info "$package" "$package_manager")
   show_message "$package_info" $timeout 
-
+  #get optional dependencies
   local optional_deps=$(get_optional_deps "$package" "$package_manager")
   show_message "$optional_deps" $timeout
-
-  local selections=$(get_selections "$optional_deps")
-  show_message "$selections" 0 "Selections"
+  #prompt all, no change, custom
+  #if all install all
+  #if no change install primary package only
+  #if custom, show optional dependencies and prompt user to select which to install
+  #and deselect which to remove
+  #finalize install and remove lists
+  #prompt user to review and confirm
 
 
   # determine selected/unselected items then filter out to be installed/uninstalled lists
-  # local selected_items=$(echo "$selections" | grep "Selected items:" | cut -d':' -f2)
-  # show_message "$selected_items" $timeout "Selected items"
-  #
-  # local not_selected_items=$(echo "$selections" | grep "Not selected items:" | cut -d':' -f2)
-  # show_message "$not_selected_items" $timeout "Not selected items"
-  #
+  local selections=$(get_selections "$optional_deps")
+  show_message "$selections" 0 "Selections"
+
   # Filter packages to install and remove
-  # for item in $selected_items; do
-  #   if ! is_installed "$item"; then
-  #     install_list+="$item "
-  #   fi
-  # done
   local install_list=$(get_install_list "$selections")
   show_message "$install_list" 0 "Install List"
 
-  # for item in $not_selected_items; do
-  #   if is_installed "$item"; then
-  #     remove_list+="$item "
-  #   fi
-  # done
   local uninstall_list=$(get_uninstall_list "$selections") 
   show_message "$uninstall_list" 0 "Remove List"
-
-
+  clear 
+  remove_packages "$uninstall_list"
+  install_packages "$install_list"
 
 
 }
