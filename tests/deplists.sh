@@ -155,7 +155,30 @@ get_selections() {
     # Return the selected and not selected items.
     echo "Selected items: ${selected_items[@]}"
     echo "Not selected items: ${not_selected_items[@]}"
-    IFS=$' \t\n'
+    # the following line 
+    # IFS=$' \t\n'
+}
+
+get_install_list () {
+  local selections="$1"
+  local selected_items=$(echo "$selections" | grep "Selected items:" | cut -d':' -f2)
+    for item in $selected_items; do
+    if ! is_installed "$item"; then
+      install_list+="$item "
+    fi
+  done
+  echo $install_list
+}
+
+get_uninstall_list() {
+  local selections="$1"
+  local not_selected_items=$(echo "$selections" | grep "Not selected items:" | cut -d':' -f2)
+  for item in $not_selected_items; do
+    if is_installed "$item"; then
+      remove_list+="$item "
+    fi
+  done 
+  echo $remove_list
 }
 
 main() {
@@ -204,26 +227,33 @@ main() {
   local selections=$(get_selections "$optional_deps")
   show_message "$selections" 0 "Selections"
 
-  local selected_items=$(echo "$selections" | grep "Selected items:" | cut -d':' -f2)
-  show_message "$selected_items" $timeout "Selected items"
 
-  local not_selected_items=$(echo "$selections" | grep "Not selected items:" | cut -d':' -f2)
-  show_message "$not_selected_items" $timeout "Not selected items"
-
+  # determine selected/unselected items then filter out to be installed/uninstalled lists
+  # local selected_items=$(echo "$selections" | grep "Selected items:" | cut -d':' -f2)
+  # show_message "$selected_items" $timeout "Selected items"
+  #
+  # local not_selected_items=$(echo "$selections" | grep "Not selected items:" | cut -d':' -f2)
+  # show_message "$not_selected_items" $timeout "Not selected items"
+  #
   # Filter packages to install and remove
-  for item in $selected_items; do
-    if ! is_installed "$item"; then
-      install_list+="$item "
-    fi
-  done
-  show_message "$install_list" $timeout "Install List"
+  # for item in $selected_items; do
+  #   if ! is_installed "$item"; then
+  #     install_list+="$item "
+  #   fi
+  # done
+  local install_list=$(get_install_list "$selections")
+  show_message "$install_list" 0 "Install List"
 
-  for item in $not_selected_items; do
-    if is_installed "$item"; then
-      remove_list+="$item "
-    fi
-  done 
-  show_message "$remove_list" $timeout "Remove List"
+  # for item in $not_selected_items; do
+  #   if is_installed "$item"; then
+  #     remove_list+="$item "
+  #   fi
+  # done
+  local uninstall_list=$(get_uninstall_list "$selections") 
+  show_message "$uninstall_list" 0 "Remove List"
+
+
+
 
 }
 
