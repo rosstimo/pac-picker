@@ -93,20 +93,20 @@ get_selection_choice() {
 
 # Returns a list of all optional dependencies of a package.
 
-select_all_optdeps () {
-    local optional_deps="$1"
-    local selected_items=()
-    IFS=$'\n'  # Set the Internal Field Separator to newline, which helps in correctly parsing the multiline input.
-    # Process each line of the optional dependencies.
-    for line in $optional_deps; do
-        package_name=$(echo "$line" | cut -d':' -f1)
-        # Add all package names to the selected items list.
-        selected_items+=("$package_name")
-    done
-    # Return all items as selected.
-    echo "Selected items: ${selected_items[@]}"
-    IFS=$' \t\n'  # Reset IFS to default of space, tab, and newline.
-}
+# select_all_optdeps () {
+#     local optional_deps="$1"
+#     local selected_items=()
+#     IFS=$'\n'  # Set the Internal Field Separator to newline, which helps in correctly parsing the multiline input.
+#     # Process each line of the optional dependencies.
+#     for line in $optional_deps; do
+#         package_name=$(echo "$line" | cut -d':' -f1)
+#         # Add all package names to the selected items list.
+#         selected_items+=("$package_name")
+#     done
+#     # Return all items as selected.
+#     echo "Selected items: ${selected_items[@]}"
+#     IFS=$' \t\n'  # Reset IFS to default of space, tab, and newline.
+# }
 select_all_optional_deps() {
     local optional_deps="$1"
     local selected_items=()
@@ -149,41 +149,41 @@ get_optional_deps() {
     done
 }
 
-#   Returns lists`` of selected and not selected items.
-get_selections-old() {
-    local optional_deps="$1"
-    local dialog_items=()
-    IFS=$'\n'  # Set the Internal Field Separator to newline, which helps in correctly parsing the multiline input.
-    # Process each line of the optional dependencies.
-    for line in $optional_deps; do
-        package_name=$(echo "$line" | cut -d':' -f1)
-        description=$(echo "$line" | cut -d':' -f2)
-        installed=$(echo "$line" | cut -d':' -f3)
-        # Add the package name, description, and selection status to the dialog list.
-        if [ "$installed" -eq 1 ]; then
-            dialog_items+=("$package_name" "$description" "on")
-        else
-            dialog_items+=("$package_name" "$description" "off")
-        fi
-    done
-    # Create a dialog checklist of optional dependencies.
-    choices=$(dialog --separate-output --checklist "Select optional dependencies to install:" 32 64 10 "${dialog_items[@]}" 2>&1 >/dev/tty)
-    local selected_items=()
-    local not_selected_items=()
-    # Convert choices to an array.
-    IFS=$'\n' read -d '' -r -a selected_items <<< "$choices"
-    # Determine not selected items.
-    for line in $optional_deps; do
-        package_name=$(echo "$line" | cut -d':' -f1)
-        if ! [[ " ${selected_items[@]} " =~ " ${package_name} " ]]; then
-            not_selected_items+=("$package_name")
-        fi
-    done
-    # Return the selected and not selected items.
-    echo "Selected items: ${selected_items[@]}"
-    echo "Not selected items: ${not_selected_items[@]}"
-    IFS=$' \t\n'  # Reset IFS to default of space, tab, and newline.
-}
+# #   Returns lists`` of selected and not selected items.
+# get_selections-old() {
+#     local optional_deps="$1"
+#     local dialog_items=()
+#     IFS=$'\n'  # Set the Internal Field Separator to newline, which helps in correctly parsing the multiline input.
+#     # Process each line of the optional dependencies.
+#     for line in $optional_deps; do
+#         package_name=$(echo "$line" | cut -d':' -f1)
+#         description=$(echo "$line" | cut -d':' -f2)
+#         installed=$(echo "$line" | cut -d':' -f3)
+#         # Add the package name, description, and selection status to the dialog list.
+#         if [ "$installed" -eq 1 ]; then
+#             dialog_items+=("$package_name" "$description" "on")
+#         else
+#             dialog_items+=("$package_name" "$description" "off")
+#         fi
+#     done
+#     # Create a dialog checklist of optional dependencies.
+#     choices=$(dialog --separate-output --checklist "Select optional dependencies to install:" 32 64 10 "${dialog_items[@]}" 2>&1 >/dev/tty)
+#     local selected_items=()
+#     local not_selected_items=()
+#     # Convert choices to an array.
+#     IFS=$'\n' read -d '' -r -a selected_items <<< "$choices"
+#     # Determine not selected items.
+#     for line in $optional_deps; do
+#         package_name=$(echo "$line" | cut -d':' -f1)
+#         if ! [[ " ${selected_items[@]} " =~ " ${package_name} " ]]; then
+#             not_selected_items+=("$package_name")
+#         fi
+#     done
+#     # Return the selected and not selected items.
+#     echo "Selected items: ${selected_items[@]}"
+#     echo "Not selected items: ${not_selected_items[@]}"
+#     IFS=$' \t\n'  # Reset IFS to default of space, tab, and newline.
+# }
 
 get_selections() {
     local optional_deps="$1"
@@ -238,6 +238,18 @@ get_uninstall_list() {
   echo $remove_list
 }
 
+# Shows a summary of the packages to install and remove.
+show_summary() {
+    local install_list="$1"
+    local remove_list="$2"
+    dialog --title "Summary" --msgbox "Packages to install:\n$install_list\n\nPackages to remove:\n$remove_list" 15 50
+}
+
+# Prompts the user to confirm the action.
+confirm_action() {
+    dialog --title "Confirm" --yesno "Do you want to proceed with the installation and removal of packages?" 10 50
+    return $?
+}
 # Removes a list of packages.
 # this won't remove anything needed by other packages
 # TODO: may want to add choice for --noconfirm flag
@@ -317,20 +329,27 @@ main() {
   # Filter packages to install and remove
   local install_list=$(get_install_list "$selections")
   local uninstall_list=$(get_uninstall_list "$selections") 
-  show_message "$install_list" 0 "Install List"
-  show_message "$uninstall_list" 0 "Remove List"
+  # show_message "$install_list" 0 "Install List"
+  # show_message "$uninstall_list" 0 "Remove List"
   
 
   #finalize install and remove lists
-
   #prompt user to review and confirm
-
-
+clear
+    # Show summary and confirm
+    show_summary "$install_list" "$uninstall_list"
+    if confirm_action; then
+        # Perform installation and removal
+        if [ -n "$uninstall_list" ]; then
+          remove_packages "$uninstall_list"
+        fi
+        if [ -n "$install_list" ]; then
+          install_packages "$package install_list"
+        fi
+    else
+        echo "Action canceled."
+    fi
   # clear 
-  # remove_packages "$uninstall_list"
-  # install_packages "$install_list"
-
-
 }
 
 main "$@"
